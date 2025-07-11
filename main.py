@@ -135,20 +135,34 @@ from fastapi import Body
 
 @app.post("/update-location")
 def update_location(batch: str = Body(...), location: str = Body(...)):
-    docs = db.collection("ledger").stream()
-    for doc in docs:
-        data = doc.to_dict()
-        if data["medicine"]["batch"] == batch:
-            tracking_list = data.get("tracking", [])
-            tracking_list.append({
-                "location": location,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M")
-            })
+    try:
+        docs = db.collection("ledger").stream()
+        for doc in docs:
+            data = doc.to_dict()
 
-            status = f"In Transit at {location}"
-            doc.reference.update({
-                "tracking": tracking_list,
-                "status": status
-            })
-            return {"message": "Tracking updated", "new_tracking": tracking_list}
-    return {"error": "Batch not found"}
+            if "medicine" in data and data["medicine"]["batch"] == batch:
+                tracking = data.get("tracking", [])
+
+                new_entry = {
+                    "location": location,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M")
+                }
+                tracking.append(new_entry)
+
+                status = f"In Transit at {location}"
+
+                doc.reference.update({
+                    "tracking": tracking,
+                    "status": status
+                })
+
+                return {
+                    "message": f"Tracking updated for {batch}",
+                    "new_tracking": tracking,
+                    "status": status
+                }
+
+        return {"error": "Batch not found"}
+    except Exception as e:
+        return {"error": str(e)}
+
