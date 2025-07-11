@@ -11,14 +11,16 @@ from firebase_admin import credentials, firestore
 # Initialize FastAPI app
 app = FastAPI()
 
-# Enable CORS
+from fastapi.middleware.cors import CORSMiddleware
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "https://medchain-frontend.vercel.app"],
+    allow_origins=["https://medchain-frontend.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Initialize Firebase Admin
 cred = credentials.Certificate("firebase_key.json")
