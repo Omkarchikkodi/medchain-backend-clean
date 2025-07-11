@@ -7,6 +7,7 @@ import hashlib
 import json
 import firebase_admin
 from firebase_admin import credentials, firestore
+from datetime import datetime, timedelta
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -33,6 +34,7 @@ class Medicine(BaseModel):
     batch: str
     expiry: str
 
+
 @app.post("/register")
 def register_medicine(med: Medicine):
     # Create hash
@@ -40,14 +42,26 @@ def register_medicine(med: Medicine):
     med_json = json.dumps(med_data, sort_keys=True)
     hash_val = hashlib.sha256(med_json.encode()).hexdigest()
 
+    # Add tracking and status fields
+    ledger_entry = {
+        "medicine": med_data,
+        "hash": hash_val,
+        "tracking": [
+            {
+                "location": "Manufacturer",
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M")
+            }
+        ],
+        "eta": (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d"),
+        "status": "In Transit"
+    }
+
     # Store in Firestore
     doc_ref = db.collection("ledger").document()
-    doc_ref.set({
-        "medicine": med_data,
-        "hash": hash_val
-    })
+    doc_ref.set(ledger_entry)
 
-    return {"message": "Medicine registered", "data": med_data, "hash": hash_val}
+    return {"message": "Medicine registered", "data": ledger_entry}
+
 
 @app.get("/ledger")
 def get_ledger():
@@ -116,3 +130,26 @@ def seed_medicines():
         })
 
     return {"message": "Sample medicines seeded"}
+
+from fastapi import Body
+
+@app.post("/update-location")
+def update_location(batch: str = Body(...), location: str = Body(...)):
+    # Get document by batch and update tracking
+    docs = db.collection("ledger").stream()
+    for doc in docs:
+        data = doc.to_dict()
+        if data["medicine"]["batch"] == batch:
+            new_entry = {
+                "location": location,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M")
+            }
+            data["tracking"].append(new_entry)
+            data["status"] = f"In Transit at {location}"
+            doc.reference.update({
+                "tracking": data["tracking"],
+                "status": data["status"]
+            })
+            return {"message": "Tracking updated", "new_tracking": data["tracking"]}
+    return {"error": "Batch not found"}
+
